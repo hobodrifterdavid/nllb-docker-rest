@@ -1,3 +1,5 @@
+import asyncio
+import itertools
 import ctranslate2
 import transformers
 from typing import Dict, List, Union
@@ -10,7 +12,7 @@ tokenizers: Dict[str, Union[transformers.PreTrainedTokenizer,
                  transformers.PreTrainedTokenizerFast]] = {}
 
 
-async def translate(src_lang_flores: str, tgt_lang_flores: str, textArr: List[str]) -> List[str]:
+def translate_sync(src_lang_flores: str, tgt_lang_flores: str, textArr: List[str]) -> List[str]:
 
     if (src_lang_flores not in tokenizers):
         tokenizers[src_lang_flores] = transformers.AutoTokenizer.from_pretrained(
@@ -20,22 +22,113 @@ async def translate(src_lang_flores: str, tgt_lang_flores: str, textArr: List[st
 
     target_prefix = [tgt_lang_flores]
 
+    arg1 = [tokenizer.convert_ids_to_tokens(
+            tokenizer.encode(text)) for text in textArr]
+    arg2 = target_prefix = [target_prefix]*len(textArr)
+
+    print(f"Processing batch: {len(arg2)}")
+
     results = translator.translate_batch(
-        [tokenizer.convert_ids_to_tokens(
-            tokenizer.encode(text)) for text in textArr],
-        target_prefix=[target_prefix]*len(textArr),
-        max_batch_size=512
-        )
-    
-    # 1. (self: ctranslate2._ext.Translator, source: List[List[str]], target_prefix: Optional[List[Optional[List[str]]]] = None, *, max_batch_size: int = 0, batch_type: str = 'examples', asynchronous: bool = False, beam_size: int = 2, patience: float = 1, num_hypotheses: int = 1, length_penalty: float = 1, coverage_penalty: float = 0, repetition_penalty: float = 1, no_repeat_ngram_size: int = 0, disable_unk: bool = False, suppress_sequences: Optional[List[List[str]]] = None, end_token: Optional[str] = None, prefix_bias_beta: float = 0, max_input_length: int = 1024, max_decoding_length: int = 256, min_decoding_length: int = 1, use_vmap: bool = False, return_scores: bool = False, return_attention: bool = False, return_alternatives: bool = False, min_alternative_expansion_prob: float = 0, sampling_topk: int = 1, sampling_temperature: float = 1, replace_unknowns: bool = False) -> Union[List[ctranslate2._ext.TranslationResult], List[ctranslate2._ext.AsyncTranslationResult]]
+        arg1,
+        target_prefix=arg2,
+        max_batch_size=128
+    )
 
     targets = [result.hypotheses[0][1:] for result in results]
 
     translations = [tokenizer.decode(
         tokenizer.convert_tokens_to_ids(target)) for target in targets]
-    print(translations)
+
     return translations
 
+
+async def translate_async(src_lang_flores: str, tgt_lang_flores: str, textArr: List[str]) -> List[str]:
+
+    if (src_lang_flores not in tokenizers):
+        tokenizers[src_lang_flores] = transformers.AutoTokenizer.from_pretrained(
+            "nllb-200-3.3B", src_lang=src_lang_flores)
+
+    tokenizer = tokenizers[src_lang_flores]
+
+    target_prefix = [tgt_lang_flores]
+
+    arg1 = [tokenizer.convert_ids_to_tokens(
+            tokenizer.encode(text)) for text in textArr]
+    arg2 = target_prefix = [target_prefix]*len(textArr)
+
+    print(f"Processing batch: {len(arg2)}")
+
+    def sync_func():
+        return translator.translate_batch(
+            arg1,
+            target_prefix=arg2,
+            max_batch_size=128
+        )
+
+    # Run sync_func asyncronously, so we don't block the event loop.
+    # Allows other requests to be handled meanwhile.
+    loop = asyncio.get_event_loop()
+    results = await loop.run_in_executor(None, lambda: sync_func())
+
+    targets = [result.hypotheses[0][1:] for result in results]
+
+    translations = [tokenizer.decode(
+        tokenizer.convert_tokens_to_ids(target)) for target in targets]
+    # print(translations)
+    return translations
+
+
+async def translate_batch_async(src_lang_flores: List[str], tgt_lang_flores: List[str], textArrArr: List[List[str]]) -> List[str]:
+
+    dest_flat = []
+    tokenised = []
+
+    for i, textArr in enumerate(textArrArr):
+        srcLang = src_lang_flores[i]
+        destLang = tgt_lang_flores[i]
+
+        if (srcLang not in tokenizers):
+            tokenizers[srcLang] = transformers.AutoTokenizer.from_pretrained(
+                "nllb-200-3.3B", src_lang=srcLang)
+
+        tokenizer = tokenizers[srcLang]
+
+        # await translate(srcLang, destLang, textArr)
+
+        for text in textArr:
+            thisTextTokens = tokenizer.convert_ids_to_tokens(
+                tokenizer.encode(text))
+            tokenised.extend([thisTextTokens])
+            dest_flat.append([destLang])
+
+    print(f"Processing batch: {len(dest_flat)}")
+
+    def sync_func():
+        return translator.translate_batch(
+            tokenised,
+            target_prefix=dest_flat,
+            max_batch_size=128
+        )
+
+    # Run sync_func asyncronously, so we don't block the event loop.
+    # Allows other requests to be handled meanwhile.
+    loop = asyncio.get_event_loop()
+    results = await loop.run_in_executor(None, lambda: sync_func())
+
+    targets = [result.hypotheses[0][1:] for result in results]
+
+    translations = [tokenizer.decode(
+        tokenizer.convert_tokens_to_ids(target)) for target in targets]
+
+    rv: List[List[str]] = []
+
+    for textArr in textArrArr:
+        pipi: List[str] = []
+        for text in textArr:
+            pipi.append(translations.pop())
+        rv.append(pipi)
+
+    return rv
 
 # googleToFlores200Codes = {
 #     'af': 'afr_Latn',
