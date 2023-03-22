@@ -125,7 +125,7 @@ async def translate_batch_async(src_lang_flores: List[str], tgt_lang_flores: Lis
     for textArr in textArrArr:
         pipi: List[str] = []
         for text in textArr:
-            pipi.append(translations.pop())
+            pipi.append(translations.pop(0))
         rv.append(pipi)
 
     return rv
