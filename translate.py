@@ -2,8 +2,8 @@ import asyncio
 import ctranslate2
 import transformers
 from typing import Dict, List, Union
+from stopes_snippet.split_clean import splitAndClean
 
-from ssplit import ssplit
 
 translator = ctranslate2.Translator(
     "nllb-200-3.3B-converted", device='auto', compute_type="float16", device_index=[0, 1])
@@ -13,43 +13,46 @@ tokenizers: Dict[str, Union[transformers.PreTrainedTokenizer,
                  transformers.PreTrainedTokenizerFast]] = {}
 
 
-async def translate_batch_async(src_lang_G: List[str], tgt_lang_G: List[str], batches_textArrArr: List[List[str]]) -> List[str]:
+async def translate_batch_async(src_lang_flores: List[str], tgt_lang_flores: List[str], batches_textArrArr: List[List[str]]) -> List[str]:
 
     # Flaten the passed batches down to simple flat arrays
     flatBatches_textArr: List[str] = []
     # two-letter Google translate codes..
-    flatBatches_src_lang_G: List[str] = []
+    flatBatches_src_lang_flores: List[str] = []
     # two-letter Google translate codes..
-    flatBatches_tgt_lang_G: List[str] = []
+    flatBatches_tgt_lang_flores: List[str] = []
 
     for i, batch_textArr in enumerate(batches_textArrArr):
         # two-letter Google translate codes..
-        thisSrcLang_G = src_lang_G[i]
-        thisDestLang_G = tgt_lang_G[i]
+        thisSrcLang_flores = src_lang_flores[i]
+        thisDestLang_flores = tgt_lang_flores[i]
 
         for text in batch_textArr:
             flatBatches_textArr.append(text)
-            flatBatches_src_lang_G.append(src_lang_G[i])
-            flatBatches_tgt_lang_G.append(tgt_lang_G[i])
+            flatBatches_src_lang_flores.append(src_lang_flores[i])
+            flatBatches_tgt_lang_flores.append(tgt_lang_flores[i])
 
-    # Further divide each string to sentences using the Moses sentence splitter..
+    # Further divide each string to sentences using a sentence splitter..
 
     sentences: List[str] = []
     # How many sentences were in each passed string..
     sentences_counts: List[int] = []
-    sentences_src_lang_G: List[str] = []
-    sentences_tgt_lang_G: List[str] = []
+    sentences_src_lang_flores: List[str] = []
+    sentences_tgt_lang_flores: List[str] = []
 
     for i, thisTranslateText in enumerate(flatBatches_textArr):
 
-        thisSrcLang_G = flatBatches_src_lang_G[i]
-        thisTgtLang_G = flatBatches_tgt_lang_G[i]
-        theseSentences: List[str] = ssplit(thisTranslateText, thisSrcLang_G)
+        thisSrcLang_flores = flatBatches_src_lang_flores[i]
+        thisTgtLang_flores = flatBatches_tgt_lang_flores[i]
+        theseSentences: List[str] = splitAndClean(
+            thisSrcLang_flores, thisTranslateText)
 
         sentences_counts.append(len(theseSentences))
         sentences.extend(theseSentences)
-        sentences_src_lang_G.extend([thisSrcLang_G]*len(theseSentences))
-        sentences_tgt_lang_G.extend([thisTgtLang_G]*len(theseSentences))
+        sentences_src_lang_flores.extend(
+            [thisSrcLang_flores]*len(theseSentences))
+        sentences_tgt_lang_flores.extend(
+            [thisTgtLang_flores]*len(theseSentences))
 
     # Tokenize the sentences
 
@@ -57,13 +60,13 @@ async def translate_batch_async(src_lang_G: List[str], tgt_lang_G: List[str], ba
 
     for i, sentence in enumerate(sentences):
 
-        thisSrcLang_G = sentences_src_lang_G[i]
+        thisSrcLang_flores = sentences_src_lang_flores[i]
 
-        if (thisSrcLang_G not in tokenizers):
-            tokenizers[thisSrcLang_G] = transformers.AutoTokenizer.from_pretrained(
-                "nllb-200-3.3B", src_lang=googleToFlores200Codes[thisSrcLang_G])
+        if (thisSrcLang_flores not in tokenizers):
+            tokenizers[thisSrcLang_flores] = transformers.AutoTokenizer.from_pretrained(
+                "nllb-200-3.3B", src_lang=thisSrcLang_flores)
 
-        tokenizer = tokenizers[thisSrcLang_G]
+        tokenizer = tokenizers[thisSrcLang_flores]
 
         thisSentenceTokens = tokenizer.convert_ids_to_tokens(
             tokenizer.encode(sentence))
@@ -76,8 +79,8 @@ async def translate_batch_async(src_lang_G: List[str], tgt_lang_G: List[str], ba
     def sync_func():
         return translator.translate_batch(
             sentences_tokensied,
-            target_prefix=[[googleToFlores200Codes[thisDestLang_G]]
-                           for thisDestLang_G in sentences_tgt_lang_G],
+            target_prefix=[[thisDestLang_flores]
+                           for thisDestLang_G in sentences_tgt_lang_flores],
             max_batch_size=128
         )
 

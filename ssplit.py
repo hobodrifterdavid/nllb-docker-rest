@@ -1,3 +1,5 @@
+# This file uses a moses style sentence splitter only.
+
 # This lib doesn't have a working sentence tokeniser
 # https://github.com/alvations/sacremoses/tree/master/sacremoses
 
