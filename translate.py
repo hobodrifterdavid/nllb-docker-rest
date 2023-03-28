@@ -1,5 +1,4 @@
 import asyncio
-import itertools
 import ctranslate2
 import transformers
 from typing import Dict, List, Union
