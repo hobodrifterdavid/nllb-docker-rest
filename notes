@@ -1,3 +1,0 @@
-# Convert model like this:
-
-ct2-transformers-converter --model nllb-200-3.3B/ --output_dir nllb-200-3.3B-converted

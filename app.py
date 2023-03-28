@@ -1,11 +1,9 @@
 # Import necessary libraries
-from typing import List
+from typing import List, Tuple
 from fastapi import FastAPI
 from pydantic import BaseModel
-from translate import translate_sync, translate_async, translate_batch_async
-
+from translate import translate_batch_async
 import asyncio
-from typing import List
 
 # Define a FastAPI app
 app = FastAPI()
@@ -19,7 +17,8 @@ class InputData(BaseModel):
     textArray: List[str]
 
 
-translations = []  # a list to store translation requests
+active_translation_requests: List[Tuple[str, str, List[str], asyncio.Future]] = [
+]  # a list to store translation requests
 
 
 @app.post("/dt_translate_nllb")
@@ -39,29 +38,31 @@ async def dt_translate_nllb(data: InputData):
 
 async def process_translation(src_lang_flores: str, tgt_lang_flores: str, textArr: List[str]) -> List[str]:
     future = asyncio.get_running_loop().create_future()
-    translations.append((src_lang_flores, tgt_lang_flores, textArr, future))
+    active_translation_requests.append(
+        (src_lang_flores, tgt_lang_flores, textArr, future))
     result = await future
     return result
 
 
 async def batch_translate():
-    global translations
+    global active_translation_requests
 
     # allow the event loop to handle some network requests?
     await asyncio.sleep(0.1)
 
     while True:
-        if translations:
-            processingNow = len(translations)
-            batch_src = [src for src, _, _, _ in translations]
-            batch_tgt = [tgt for _, tgt, _, _ in translations]
-            batch_text = [text for _, _, text, _ in translations]
-            results = await translate_batch_async(batch_src, batch_tgt, batch_text)
+        if active_translation_requests:
+            requestsProcessingNow = len(active_translation_requests)
+            results = await translate_batch_async(
+                [src for src, _, _, _ in active_translation_requests],
+                [tgt for _, tgt, _, _ in active_translation_requests],
+                [text for _, _, text, _ in active_translation_requests]
+            )
 
-            for i, (_, _, _, future) in enumerate(translations[:processingNow]):
+            for i, (_, _, _, future) in enumerate(active_translation_requests[:requestsProcessingNow]):
                 future.set_result(results[i])
             # remove the processed tasks:
-            translations = translations[processingNow:]
+            active_translation_requests = active_translation_requests[requestsProcessingNow:]
         else:
             await asyncio.sleep(0.1)
 
