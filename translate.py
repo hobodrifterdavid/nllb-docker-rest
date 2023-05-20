@@ -17,9 +17,9 @@ async def translate_batch_async(src_lang_flores: List[str], tgt_lang_flores: Lis
 
     # Flaten the passed batches down to simple flat arrays
     flatBatches_textArr: List[str] = []
-    # two-letter Google translate codes..
+    # flores lang codes..
     flatBatches_src_lang_flores: List[str] = []
-    # two-letter Google translate codes..
+    # flores lang codes..
     flatBatches_tgt_lang_flores: List[str] = []
 
     for i, batch_textArr in enumerate(batches_textArrArr):
@@ -80,7 +80,7 @@ async def translate_batch_async(src_lang_flores: List[str], tgt_lang_flores: Lis
         return translator.translate_batch(
             sentences_tokensied,
             target_prefix=[[thisDestLang_flores]
-                           for thisDestLang_G in sentences_tgt_lang_flores],
+                           for thisDestLang_flores in sentences_tgt_lang_flores],
             max_batch_size=128
         )
 
